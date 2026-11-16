@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Тренировки</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--tx:#e2e8f0;--mut:#94a3b8;--ac:#38bdf8;--ok:#22c55e}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 80px}
+header{position:sticky;top:0;background:var(--bg);z-index:5;padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+header h1{font-size:18px;margin:0;flex:1}
+.tab{background:none;border:1px solid var(--line);color:var(--mut);padding:6px 12px;border-radius:999px;font-size:14px}
+.tab.on{color:var(--bg);background:var(--ac);border-color:var(--ac)}
+main{padding:16px;max-width:560px;margin:0 auto}
+.days{display:grid;gap:12px}
+.day{background:var(--card);border:1px solid var(--line);color:var(--tx);border-radius:16px;padding:22px;font-size:22px;font-weight:600;text-align:left;display:flex;justify-content:space-between;align-items:center}
+.day small{font-size:13px;color:var(--mut);font-weight:400;display:block;margin-top:4px}
+.day.star{border-color:var(--ac)}
+.hint{color:var(--mut);font-size:14px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.tag{font:600 16px ui-monospace,Menlo,monospace;color:var(--ac);word-break:break-word}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.btn{background:var(--line);color:var(--tx);border:0;border-radius:10px;padding:10px 14px;font-size:15px}
+.btn.pri{background:var(--ac);color:#0f172a;font-weight:600}
+.btn.ok{background:var(--ok);color:#052e16;font-weight:600}
+.btn.sm{padding:6px 10px;font-size:13px}
+.title{color:var(--mut);font-size:14px}
+.note{color:#fbbf24;font-size:14px;margin-top:4px}
+.imgs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.imgs img{width:100%;border-radius:8px;background:#0b1220;aspect-ratio:9/16;object-fit:cover}
+.ang{font-size:12px;color:var(--mut);margin-top:8px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center}
+.bar .btn{flex:1;max-width:180px}
+.h{border-left:3px solid var(--ac);padding-left:10px}
+.hd{font-weight:600}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000c;padding:10px 16px;border-radius:10px;font-size:14px;z-index:9}
+pre{white-space:pre-wrap;background:var(--card);padding:12px;border-radius:10px;font-size:13px}
+textarea{width:100%;height:120px;background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:8px}
+</style>
+</head>
+<body>
+<header><h1>🏋️ Тренировки</h1><button class="tab on" id="t1">План</button><button class="tab" id="t2">История</button></header>
+<main id="app"></main>
+<div id="bar"></div>
+<script>
+const EMBED=null, FR=null;
+let DATA=EMBED, plan=null, tech={}, view='home';
+const $=s=>document.querySelector(s);
+const LS='trener_history_v1';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),1800)}
+function hist(){try{const h=JSON.parse(localStorage.getItem(LS));if(Array.isArray(h))return h}catch(e){}return DATA.hist.slice()}
+function saveHist(h){try{localStorage.setItem(LS,JSON.stringify(h))}catch(e){toast('Не удалось сохранить')}}
+const days=()=>Object.keys(DATA.tpl.days);
+function lastIdx(day){const h=hist();for(let i=h.length-1;i>=0;i--)if(h[i].day===day)return i;return -1}
+function suggested(){let b=null,bi=1e9;for(const d of days()){const i=lastIdx(d);if(i<bi){bi=i;b=d}}return b}
+function lastDate(day){const i=lastIdx(day);return i<0?'ещё не было':hist()[i].date}
+function recentIds(day){const s=hist().filter(h=>h.day===day).slice(-2);const r=new Set();s.forEach(h=>h.items.forEach(i=>r.add(i.id)));return r}
+function pickVariant(id){
+  const vs=Object.keys(DATA.db[id].v).sort();const used={};
+  hist().forEach(h=>h.items.forEach(i=>{if(i.id===id)used[i.variant]=(used[i.variant]||0)+1}));
+  const w=vs.map(v=>1+3*(used[v]||0));let r=Math.random()*w.reduce((a,b)=>a+b,0);
+  for(let i=0;i<vs.length;i++){r-=w[i];if(r<=0)return vs[i]}return vs[0]}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function mkItem(id,slot,si){const n=DATA.tpl.notes||{};return{id,title:DATA.db[id].t,variant:pickVariant(id),slot:si,size:slot.size||'',muscle:(slot.labels||{})[id]||slot.muscle||'',note:n[id]||''}}
+function generate(day){
+  const recent=recentIds(day),items=[],used=new Set();
+  DATA.tpl.days[day].forEach((slot,si)=>{
+    const pool=slot.pool.filter(i=>DATA.db[i]&&!used.has(i));
+    let ch=(slot.must||[]).filter(i=>pool.includes(i)).slice(0,slot.count);
+    const rest=pool.filter(i=>!ch.includes(i));
+    const fresh=shuffle(rest.filter(i=>!recent.has(i))),stale=shuffle(rest.filter(i=>recent.has(i)));
+    ch=ch.concat(fresh.concat(stale).slice(0,slot.count-ch.length));
+    ch.forEach(id=>{used.add(id);items.push(mkItem(id,slot,si))});
+  });
+  return{day,items}}
+function replaceItem(k){
+  const it=plan.items[k],slot=DATA.tpl.days[plan.day][it.slot];
+  const inPlan=new Set(plan.items.map(i=>i.id));
+  const opts=slot.pool.filter(i=>DATA.db[i]&&!inPlan.has(i));
+  if(!opts.length){toast('Других вариантов нет');return}
+  const recent=recentIds(plan.day);const f=opts.filter(i=>!recent.has(i));
+  const id=shuffle(f.length?f:opts)[0];plan.items[k]=mkItem(id,slot,it.slot);delete tech[k];render()}
+const tag=it=>'#'+it.id+(it.variant==='1'?'':it.variant);
+function line(it){let l=tag(it);if(it.size)l+=' ('+it.size+')';if(it.muscle)l+=' '+it.muscle;if(it.note)l+=' '+it.note;return l}
+function planText(){return 'План: '+plan.day+'\n'+plan.items.map(line).join('\n')}
+function src(n){return FR?FR[n]:'frames/'+encodeURIComponent(n)}
+function imgs(it){
+  const e=DATA.db[it.id];const v=e.v[it.variant]||e.v[Object.keys(e.v)[0]];
+  return v.map((s,ai)=>(v.length>1?`<div class="ang">ракурс ${ai+1}</div>`:'')+'<div class="imgs">'+[1,2,3].map(i=>`<img loading="lazy" src="${src(s+'_'+i+'.jpg')}" alt="">`).join('')+'</div>').join('')}
+function home(){
+  const s=suggested();
+  $('#app').innerHTML='<p class="hint">Что тренируем сегодня?</p><div class="days">'+days().map(d=>`<button class="day${d===s?' star':''}" data-d="${esc(d)}"><span>${esc(d)}${d===s?' ⭐':''}<small>последний раз: ${esc(lastDate(d))}</small></span><span>›</span></button>`).join('')+'</div><p class="hint" style="margin-top:14px">⭐ — давнее всего не делали.</p>';
+  $('#bar').innerHTML='';
+  document.querySelectorAll('.day').forEach(b=>b.onclick=()=>{plan=generate(b.dataset.d);tech={};view='plan';render()})}
+function planView(){
+  $('#app').innerHTML=`<h2 style="margin:0 0 12px">${esc(plan.day)}</h2>`+plan.items.map((it,k)=>`<div class="card"><div class="tag">${esc(line(it))}</div><div class="title">${esc(it.title)}${it.variant!=='1'?' · техника '+it.variant:''}</div><div class="row"><button class="btn sm" data-t="${k}">${tech[k]?'Скрыть технику':'Показать технику'}</button><button class="btn sm" data-r="${k}">🔁 Заменить</button></div>${tech[k]?imgs(it):''}</div>`).join('');
+  $('#bar').innerHTML='<div class="bar"><button class="btn" id="bk">←</button><button class="btn" id="ag">Заново</button><button class="btn" id="cp">Копия</button><button class="btn ok" id="ap">Утвердить</button></div>';
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{const k=b.dataset.t;tech[k]=!tech[k];render()});
+  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>replaceItem(+b.dataset.r));
+  $('#bk').onclick=()=>{plan=null;view='home';render()};
+  $('#ag').onclick=()=>{plan=generate(plan.day);tech={};render()};
+  $('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(planText());toast('Скопировано')}catch(e){const t=document.createElement('textarea');t.value=planText();document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Скопировано')}catch(_){toast('Не удалось')}t.remove()}};
+  $('#ap').onclick=()=>{const h=hist();h.push({date:new Date().toISOString().slice(0,10),day:plan.day,items:plan.items.map(i=>({id:i.id,variant:i.variant}))});saveHist(h);toast('Сохранено в историю ✓');plan=null;view='home';render()}}
+function histView(){
+  const h=hist().slice().reverse();
+  $('#bar').innerHTML='';
+  $('#app').innerHTML=`<div class="row" style="margin:0 0 12px"><button class="btn sm" id="ex">Экспорт</button><button class="btn sm" id="im">Импорт</button><button class="btn sm" id="rs">Сбросить</button></div><div id="io"></div><p class="hint">Всего тренировок: ${h.length}. Эти данные хранятся только в этом телефоне.</p>`+h.slice(0,60).map(x=>`<div class="card h"><div class="hd">${esc(x.date)} · ${esc(x.day)}</div>${x.items.map(i=>`<div class="title">${esc(DATA.titles[i.id]||i.id)}${i.variant!=='1'?' (техника '+esc(i.variant)+')':''}</div>`).join('')}</div>`).join('');
+  $('#ex').onclick=()=>{$('#io').innerHTML='<pre id="ep"></pre>';$('#ep').textContent=JSON.stringify(hist());const r=document.createRange();r.selectNodeContents($('#ep'));const s=getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand('copy');toast('Скопировано')}catch(e){}};
+  $('#im').onclick=()=>{$('#io').innerHTML='<textarea id="ta" placeholder="Вставьте экспорт"></textarea><div class="row"><button class="btn sm pri" id="go">Загрузить</button></div>';$('#go').onclick=()=>{try{const a=JSON.parse($('#ta').value);if(!Array.isArray(a))throw 0;saveHist(a);toast('Загружено');render()}catch(e){toast('Неверный формат')}}};
+  $('#rs').onclick=()=>{if(confirm('Вернуть историю, как была при установке?')){try{localStorage.removeItem(LS)}catch(e){}render()}}}
+function render(){
+  $('#t1').classList.toggle('on',view!=='hist');$('#t2').classList.toggle('on',view==='hist');
+  if(view==='hist')histView();else if(view==='plan'&&plan)planView();else home()}
+$('#t1').onclick=()=>{view=plan?'plan':'home';render()};
+$('#t2').onclick=()=>{view='hist';render()};
+(async()=>{
+  if(!DATA){try{DATA=await (await fetch('data.json')).json()}catch(e){$('#app').textContent='Не удалось загрузить данные';return}}
+  render();
+  if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!FR)navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
